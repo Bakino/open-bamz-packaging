@@ -1,0 +1,19 @@
+{
+  "name": "open-bamz-packaging",
+  "version": "1.0.0",
+  "main": "index.mjs",
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "description": "Open BamZ packaging plugin",
+  "dependencies": {
+    "acorn": "^8.15.0",
+    "cheerio": "^1.1.2",
+    "express": "^5.2.1",
+    "glob": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1"
+  }
+}
