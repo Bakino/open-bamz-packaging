@@ -1,4 +1,5 @@
 const SERVER_URL = "" ;
+window.SERVER_URL = SERVER_URL;
 const STATIC_RESOURCES = [] ;
 const LOGIN_URLS = ["/login", "/logout"] ;
 const realFetch = window.fetch ;

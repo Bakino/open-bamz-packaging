@@ -6,7 +6,7 @@ const cheerio = await import('cheerio');
 const acorn = await import('acorn');
 import {glob} from 'glob';
 //import { fileURLToPath } from "url";
-import { readFile, stat } from 'fs/promises';
+import { readFile, stat, realpath, readdir } from 'fs/promises';
 import { injectCordova } from './cordova/cordova-inject.mjs';
 
 export const prepareDatabase = async () => {
@@ -24,8 +24,11 @@ function extractUrlsFromHTML(html) {
   
     $('script[src], link[href]').each((index, element) => {
       const src = $(element).attr('src') || $(element).attr('href');
-      if (src && src.startsWith('https://')) {
-        urls.push(src);
+      const rel = $(element).attr('rel')
+      if(rel !== "preconnect"){
+          if (src && src.startsWith('https://')) {
+            urls.push(src);
+          }
       }
     });
   
@@ -49,6 +52,14 @@ function findImportURLs(node, content) {
                 urls.push(literalStr);
             }
         }*/
+    }else if(node.type === "NewExpression"){
+        if(node.callee?.name === "URL") {
+            if(node.arguments && node.arguments[0]?.type === "Literal"){
+                //example : const cssUrl = new URL('./ag-grid-lib.css', import.meta.url).href
+                let literalStr = node.arguments[0].value;
+                urls.push(literalStr);
+            }
+        }
     }
 
     // Traverse child nodes
@@ -104,7 +115,7 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
 
 
     function transformCdnUrlToLocal(cdnUrl, isHtml){
-        let localUrl = `/vendor/${cdnUrl.replace("https://", "")}`;
+        let localUrl = `/vendor/${cdnUrl.replace("https://", "").replace(/[^0-9a-zA-Z_./-]/g, "_").replaceAll("/_", "/")}`;
         if(!isHtml && (!localUrl.endsWith(".js") && !localUrl.endsWith(".mjs") && !localUrl.endsWith(".css") && !localUrl.endsWith(".json"))){
             localUrl += ".js" ;
         }
@@ -121,6 +132,7 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
         const files = await glob(`${filesDirectory}/**/*`, {});
 
         const filesToCopy = [] ;
+        const filesToReplace = [] ;
         const urlToReplace = [] ;
 
         let appDest = "";
@@ -140,6 +152,11 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                 filesToCopy.push({
                     url: u.url,
                     dest: "static/"+u.dest,
+                });
+                filesToReplace.push({
+                    url: u.url,
+                    dest: "static/"+u.dest,
+                    allHtml: false
                 });
                 const response = await fetch(origin+u.url);
                 //console.log("response content type", url, response.headers.get("content-type") )
@@ -162,6 +179,7 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
         for(let f of files){
             let filePath = path.relative(filesDirectory, f);
             if(filePath === "sw.js"){ continue ; }
+            if(filePath.startsWith("@types")){ continue ; }
             const stats = await stat(f);
             if(stats.isDirectory()){ continue ; }
 
@@ -178,10 +196,10 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                 url: `/${filePath}`,
                 dest: `${appDest}${filePath}`,
             });
-            if(filePath?.includes("viewz-extensions")){
-                console.log("ANALYSE bootstrap loader !!!!!!!!!")
-                debugger;
-            }
+            // if(filePath?.includes("viewz-extensions")){
+            //     console.log("ANALYSE bootstrap loader !!!!!!!!!")
+            //     debugger;
+            // }
 
         }
 
@@ -198,10 +216,10 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                     dest: fileDest
                 }); 
 
-                if(fileDest?.includes("viewz-extensions")){
-                    console.log("ANALYSE bootstrap loader !!!!!!!!!")
-                    debugger;
-                }
+                // if(fileDest?.includes("viewz-extensions")){
+                //     console.log("ANALYSE bootstrap loader !!!!!!!!!")
+                //     debugger;
+                // }
                 
                 //add plugin file to analyze (search for CDN or other files imported)
                 filesToAnalyze.push({
@@ -220,10 +238,10 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
             let f = file.filePath ;
             let urls = [];
 
-            if(file.baseUrl?.includes("viewz-extensions")){
-                console.log("ANALYSE bootstrap loader !!!!!!!!!")
-                debugger;
-            }
+            // if(file.baseUrl?.includes("viewz-extensions")){
+            //     console.log("ANALYSE bootstrap loader !!!!!!!!!")
+            //     debugger;
+            // }
 
             //extraction imported URL from JS/HTML
             // @ts-ignore
@@ -250,7 +268,7 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                 urls: []
             } ;
             
-            for(let copy of filesToCopy){
+            for(let copy of filesToReplace){
                 let copyUrl = copy.url.replace(origin, "") ;
                 if((isHtml && copy.allHtml) || content.replaceAll("${window.BAMZ_APP}", appName).includes(copyUrl)){
                     let dest = copy.dest;
@@ -268,18 +286,20 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                     fileUrlsToReplace.urls.push({
                         url: copyUrl,
                         dest: relativeDest,
+                        changeURL: copyUrl,
                     })
                     if(copyUrl.includes(appName)){
                         fileUrlsToReplace.urls.push({
                             url: copyUrl.replaceAll(appName, "${window.BAMZ_APP}"),
                             dest: relativeDest,
+                            changeURL2: copyUrl,
                         })
-                        if(file.baseUrl.includes("bootstrap-loader")){
-                            console.log("F$$$$$$$$$$$ fileUrlsToReplace", {
-                                url: copyUrl.replaceAll(appName, "${window.BAMZ_APP}"),
-                                dest: relativeDest,
-                            })
-                        }
+                        // if(file.baseUrl.includes("bootstrap-loader")){
+                        //     console.log("F$$$$$$$$$$$ fileUrlsToReplace", {
+                        //         url: copyUrl.replaceAll(appName, "${window.BAMZ_APP}"),
+                        //         dest: relativeDest,
+                        //     })
+                        // }
                     }
                 }
             }
@@ -289,10 +309,10 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                     //console.log("Check URL ", url, "in file", file.baseUrl);
                     let fullUrl = url;
                     let fileToAnalyze = null;
-                    if(url?.includes("viewz-extensions")){
-                        console.log("ANALYSE bootstrap loader !!!!!!!!!")
-                        debugger;
-                    }
+                    // if(url?.includes("viewz-extensions")){
+                    //     console.log("ANALYSE bootstrap loader !!!!!!!!!")
+                    //     debugger;
+                    // }
                     if(url.startsWith("http")){
                         //console.log("fetch http ", file.baseUrl, url);
                         // fetch to get dependencies
@@ -378,9 +398,18 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                         basePath = "/"+basePath ;
                     }
 
-                    let relativeDest = path.relative(path.dirname(basePath), dest)
-                    if(!relativeDest.startsWith(".") && !relativeDest.startsWith("/")){
-                        relativeDest = "./"+relativeDest ;
+                    let relativeDest;
+                    if(dest.startsWith("/vendor/")){
+                        // keep absolute path
+                        relativeDest = dest ;
+                    }else{
+                        if(dest?.includes("yesno")){
+                            debugger;
+                        }
+                        relativeDest = path.relative(path.dirname(basePath), dest)
+                        if(!relativeDest.startsWith(".") && !relativeDest.startsWith("/")){
+                            relativeDest = "./"+relativeDest ;
+                        }
                     }
                     //console.log("IN ", fileUrlsToReplace.file, "replace", url, "BY", relativeDest);
                     fileUrlsToReplace.urls.push({
@@ -391,10 +420,10 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                         url: fullUrl,
                         dest: dest,
                     });
-                    if(dest?.includes("viewz-extensions")){
-                        console.log("ANALYSE bootstrap loader !!!!!!!!!")
-                        debugger;
-                    }
+                    // if(fullUrl?.includes("fonts.g")){
+                    //     console.log("ANALYSE fonts.g !!!!!!!!!")
+                    //     debugger;
+                    // }
                     if(fileToAnalyze){
                         // @ts-ignore
                         fileToAnalyze.dest = dest ;
@@ -415,37 +444,176 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
             await injectCordova({urlToReplace, origin, filesToCopy})
         }
 
+        if(type === "nodejs"){
+            // move all front end files in a sub folder
+            for(let f of filesToCopy){
+                f.dest = `apps/${appName}/public/${f.dest}` ;
+            }
+            // add server files
+            const serverPath = path.resolve(process.cwd()) ;
+            // Include dotfiles and dot-directories by enabling the `dot` option
+            const serverFiles = await glob(`${serverPath}/**/*`, { dot: true });
+            for(let f of serverFiles){
+                const relativePath = path.relative(serverPath, f);
+                if(!ALLOWED_SERVER_PATH.some(p=>relativePath.startsWith(p))){ continue ; }
+                const stats = await stat(f);
+                if(stats.isDirectory()){ continue ; }
+                filesToCopy.push({
+                    url: "/open-bamz-packaging/download?path="+encodeURIComponent(relativePath),
+                    dest: relativePath,
+                })
+            }
+            filesToCopy.push({
+                url: "/open-bamz-packaging/download?path="+encodeURIComponent("package.json"),
+                dest: "package.json",
+            }) ;
+
+            //add plugins
+            const plugins = await readdir(process.env.PLUGINS_DIR) ;
+            for(let plugin of plugins){
+                const pluginDir = path.join(process.env.PLUGINS_DIR, plugin)
+                const pluginFiles = await glob(`${pluginDir}/**/*`, { dot: true });
+                for(let f of pluginFiles){
+                    const relativePath = path.relative(pluginDir, f);
+                    if(relativePath.startsWith("node_modules")){ continue ; }
+                    if(relativePath.startsWith(".git")){ continue ; }
+                    if(relativePath.startsWith("@types")){ continue ; }
+                    const stats = await stat(f);
+                    if(stats.isDirectory()){ continue ; }
+                    filesToCopy.push({
+                        url: "/open-bamz-packaging/download?plugin="+plugin+"&path="+encodeURIComponent(relativePath),
+                        dest: `plugins/${plugin}/${relativePath}`,
+                    })
+                }
+            }
+
+        }
+
         return { filesToCopy, urlToReplace } ;
     }
 
-    //build Cordova
-    router.use("/build/", (req, res)=>{
-        (async ()=>{
-            try{
-                // Check user has proper authorization
-                if(!await graphql.checkAppAccessMiddleware(req, res)){ return ;}
+    const ALLOWED_SERVER_PATH = [
+        ".devcontainer",
+        ".vscode",
+        "src",
+        ".dockerignore",
+        ".gitignore",
+        "docker-compose.yml",
+        "Dockerfile",
+        "Dockerfile_pgsql",
+        "eslint.config.mjs",
+        "package.json",
+    ]
 
-                let appName = req.appName;
+    router.get("/download", async (req, res)=>{
+        // download a file from server source tree
+        try{
 
-                
-                
-                // check plugin is activated for this application
-                if(await hasCurrentPlugin(appName)){
-                    let origin = req.headers.origin ;
-                    if(!origin){
-                        origin = "https://"+req.headers.host ;
-                    }
-                    const { filesToCopy, urlToReplace } = await sourceExport({ appName, origin, transformCdn: req.query.transformCdn==="true", type: req.query.type })
-                    
-                    res.json({ filesToCopy, urlToReplace })
-                }else{
-                    return res.status(402).json({error: "Plugin Cordova not installed"});
-                }
-            }catch(err){
-                logger.error("Error while building PWA %o", err) ;
-                res.status(err.statusCode??500).json(err);
+             // Check user has proper authorization
+            if(!await graphql.checkAppAccessMiddleware(req, res)){ 
+                return res.status(401).json({ error: 'Not authorized' });
             }
-        })();
+            
+            let appName = req.appName;
+            
+            // check plugin is activated for this application
+            if(!await hasCurrentPlugin(appName)){
+                return res.status(401).json({ error: 'Not authorized' });
+            }
+
+            let basePath = path.resolve(process.cwd());
+            if(req.query.plugin){
+                basePath = path.join(process.env.PLUGINS_DIR, req.query.plugin) ;
+            }
+
+            const reqPath = req.query.path;
+            if(!reqPath || typeof reqPath !== 'string'){
+                return res.status(400).json({ error: 'Missing or invalid "path" query parameter' });
+            }
+
+            if(reqPath.indexOf('\0') !== -1){
+                return res.status(400).json({ error: 'Invalid path' });
+            }
+
+            // Check it is an allowed file
+            if(!req.query.plugin){
+                if(!ALLOWED_SERVER_PATH.some(p=>reqPath.startsWith(p))){
+                    return res.status(403).json({ error: 'Access denied' });
+                }
+            }
+
+            // Normalize and prevent absolute paths
+            const normalized = path.normalize(reqPath);
+            if(path.isAbsolute(normalized)){
+                return res.status(400).json({ error: 'Invalid path' });
+            }
+
+            // Disallow any parent-directory traversal
+            const parts = normalized.split(path.sep);
+            if(parts.includes('..')){
+                return res.status(400).json({ error: 'Invalid path' });
+            }
+
+            const fullPath = path.join(basePath, normalized);
+
+            // Resolve real paths to protect against symlink escapes
+            let realBase, realFull;
+            try{
+                realBase = await realpath(basePath);
+                realFull = await realpath(fullPath);
+            }catch(e){
+                // realpath fails if the file does not exist
+                return res.status(404).json({ error: 'File not found' });
+            }
+
+            if(!(realFull === realBase || realFull.startsWith(realBase + path.sep))){
+                return res.status(400).json({ error: 'Access denied' });
+            }
+
+            const s = await stat(fullPath);
+            if(s.isDirectory()){
+                return res.status(400).json({ error: 'Path is a directory' });
+            }
+
+            // Allow serving dotfiles (files/dirs starting with a dot).
+            // `res.download` forwards options to `res.sendFile` which by default
+            // ignores dotfiles, causing a NotFoundError for dotfile requests.
+            return res.download(fullPath, undefined, { dotfiles: 'allow' });
+        }catch(err){
+            if(err?.code === 'ENOENT'){
+                return res.status(404).json({ error: 'File not found' });
+            }
+            logger?.error?.("Error in /download %o", err);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    });
+
+    //build Cordova
+    router.use("/build/", async (req, res)=>{
+        try{
+            // Check user has proper authorization
+            if(!await graphql.checkAppAccessMiddleware(req, res)){ return ;}
+
+            let appName = req.appName;
+
+            
+            
+            // check plugin is activated for this application
+            if(await hasCurrentPlugin(appName)){
+                let origin = req.headers.origin ;
+                if(!origin){
+                    origin = "https://"+req.headers.host ;
+                }
+                const { filesToCopy, urlToReplace } = await sourceExport({ appName, origin, transformCdn: req.query.transformCdn==="true", type: req.query.type })
+                
+                res.json({ filesToCopy, urlToReplace })
+            }else{
+                return res.status(402).json({error: "Plugin Cordova not installed"});
+            }
+        }catch(err){
+            logger.error("Error while building PWA %o", err) ;
+            res.status(err.statusCode??500).json(err);
+        }
     });
 
 

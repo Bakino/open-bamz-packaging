@@ -26,6 +26,21 @@
                 </div>
             </div>
         </div>
+        <div class="col-12 col-md-6">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Create NodeJS Package</h5>
+                    <p class="card-text">Create a NodeJS package for your application.</p>
+
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="transformCdnCheckbox" z-bind="transformCdn">
+                        <label class="form-check-label" for="transformCdnCheckbox">Transform CDN</label>
+                    </div>
+
+                    <button class="btn btn-primary" z-on-click="view.createNodeJSPackage()">Create package</button>
+                </div>
+            </div>
+        </div>
         <div class="col-12">
             The packaging plugin will export the source of the application to be packaged. Currently the plugin supports Cordova packaging. In the future it may supports other types of packaging such as Electron or full standalone web application.
 
@@ -65,7 +80,7 @@
                         dest: `/static/open-bamz-i18n/locales/{{lng}}.json`,
                     }]
                 });
-            </code>
+            </code>            
         </div>
     </div>
 </div>
