@@ -1,7 +1,7 @@
 const SERVER_URL = "" ;
 window.SERVER_URL = SERVER_URL;
 const STATIC_RESOURCES = [] ;
-const LOGIN_URLS = ["/login", "/logout"] ;
+const LOGIN_URLS = ["/login", "/logout", "/auth/provider"] ;
 const realFetch = window.fetch ;
 let corsHeaders = {} ;
 const CORS_HEADERS_KEY = "cordova-cors-header" ;
@@ -12,31 +12,32 @@ if(storedCorsHeaders){
     }catch(err){}
 }
 window.fetch = async function(/** @type string */ url, options){
-   
-    if(url.startsWith("file://") || url.startsWith("../") || url.startsWith("./") || STATIC_RESOURCES.some(r=>url.startsWith("/"+r))){
-        // this is a local resource
-        return fetchLocal(url) ;
-    }
+    if(url && typeof url === "string"){
+        if(url.startsWith("file://") || url.startsWith("../") || url.startsWith("./") || STATIC_RESOURCES.some(r=>url.startsWith("/"+r))){
+            // this is a local resource
+            return fetchLocal(url) ;
+        }
 
-    if(!url.startsWith("http")){
-        // add server URL
-        url = SERVER_URL + url
-    }
+        if(!url.startsWith("http")){
+            // add server URL
+            url = SERVER_URL + url
+        }
 
-    if(url.startsWith(SERVER_URL)){
-        //with calling our server, add CORS and credential headers
-        if(!options){
-            options = {} ;
+        if(url.startsWith(SERVER_URL)){
+            //with calling our server, add CORS and credential headers
+            if(!options){
+                options = {} ;
+            }
+            if(!options.headers){
+                options.headers = {} ;
+            }
+            for(let [key, value] of Object.entries(corsHeaders)){
+                options.headers[key] = value ;
+            }
+            if(LOGIN_URLS.some(u=>url.includes(u))){
+                options.headers["x-cors-auth"] = "true" ;
+            }    
         }
-        if(!options.headers){
-            options.headers = {} ;
-        }
-        for(let [key, value] of Object.entries(corsHeaders)){
-            options.headers[key] = value ;
-        }
-        if(LOGIN_URLS.some(u=>url.includes(u))){
-            options.headers["x-cors-auth"] = "true" ;
-        }    
     }
     const response = await realFetch(url, options) ;
     let updatedCorsHeaders = false ;
