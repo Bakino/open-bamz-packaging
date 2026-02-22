@@ -467,6 +467,10 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
                 url: "/open-bamz-packaging/download?path="+encodeURIComponent("package.json"),
                 dest: "package.json",
             }) ;
+            filesToCopy.push({
+                url: "/open-bamz-packaging/download?path="+encodeURIComponent("package-lock.json"),
+                dest: "package-lock.json",
+            }) ;
 
             //add plugins
             const plugins = await readdir(process.env.PLUGINS_DIR) ;
@@ -503,6 +507,7 @@ export const initPlugin = async ({ graphql, hasCurrentPlugin,contextOfApp, logge
         "Dockerfile_pgsql",
         "eslint.config.mjs",
         "package.json",
+        "package-lock.json",
     ]
 
     router.get("/download", async (req, res)=>{
